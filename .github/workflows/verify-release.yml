@@ -1,0 +1,111 @@
+name: 正式安装包模拟器验收
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 已发布的正式版本标签
+        required: true
+        default: v1.6.1
+permissions:
+  contents: read
+jobs:
+  device:
+    name: 安装公开正式包并查询三链
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 编译独立设备测试包
+        run: |
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebugAndroidTest
+      - name: 下载已发布的真实安装包
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          python3 - <<'PY'
+          import os,re
+          if not re.fullmatch(r'v[0-9]+(?:\.[0-9]+){1,3}',os.environ['RELEASE_TAG']):
+              raise SystemExit('正式版本标签格式不正确')
+          PY
+          gh release download "$RELEASE_TAG" --pattern app-release.apk --pattern chainshield-release-info.json --dir release-device
+      - name: 校验正式包并给独立测试包签名
+        env:
+          RELEASE_TAG: ${{ inputs.tag }}
+          CHAINSHIELD_KEYSTORE_BASE64: ${{ secrets.CHAINSHIELD_KEYSTORE_BASE64 }}
+          CHAINSHIELD_STORE_PASSWORD: ${{ secrets.CHAINSHIELD_STORE_PASSWORD }}
+          CHAINSHIELD_KEY_PASSWORD: ${{ secrets.CHAINSHIELD_KEY_PASSWORD }}
+          CHAINSHIELD_KEY_ALIAS: ${{ secrets.CHAINSHIELD_KEY_ALIAS }}
+        run: |
+          python3 - <<'PY'
+          import base64,hashlib,json,os,subprocess,tempfile
+          from pathlib import Path
+          root=Path('release-device'); apk=root/'app-release.apk'
+          info=json.loads((root/'chainshield-release-info.json').read_text())
+          expected='https://github.com/'+os.environ['GITHUB_REPOSITORY']+'/releases/tag/'+os.environ['RELEASE_TAG']
+          digest=hashlib.sha256(apk.read_bytes()).hexdigest()
+          if info['sha256']!=digest or info['release_url']!=expected:
+              raise SystemExit('正式安装包与发布元数据不一致')
+          tools=Path(os.environ['ANDROID_HOME'])/'build-tools/35.0.0'
+          cert='38d82f8d6d680147902bc3e55741edcaff6f8bb0b7bf5b8689a4a64447ea90ea'
+          def verify(path):
+              text=subprocess.run([str(tools/'apksigner'),'verify','--verbose','--print-certs',str(path)],capture_output=True,text=True,check=True).stdout
+              if cert not in text: raise SystemExit('签名证书与固定证书不一致')
+              return text
+          (root/'apk-signature.txt').write_text(verify(apk))
+          badging=subprocess.run([str(tools/'aapt'),'dump','badging',str(apk)],capture_output=True,text=True,check=True).stdout
+          if "package: name='com.chainshield.app'" not in badging or 'application-debuggable' in badging:
+              raise SystemExit('正式包应用标识或调试属性不正确')
+          if "versionName='"+info['version_name']+"'" not in badging or "versionCode='"+str(info['version_code'])+"'" not in badging:
+              raise SystemExit('正式包版本与发布元数据不一致')
+          (root/'apk-badging.txt').write_text(badging)
+          subprocess.run([str(tools/'zipalign'),'-c','-P','16','4',str(apk)],check=True)
+          with tempfile.TemporaryDirectory() as temp:
+              key=Path(temp)/'test-signing.p12'
+              key.write_bytes(base64.b64decode(os.environ['CHAINSHIELD_KEYSTORE_BASE64'],validate=True)); key.chmod(0o600)
+              subprocess.run([str(tools/'apksigner'),'sign','--ks',str(key),'--ks-key-alias',os.environ['CHAINSHIELD_KEY_ALIAS'],'--ks-pass','env:CHAINSHIELD_STORE_PASSWORD','--key-pass','env:CHAINSHIELD_KEY_PASSWORD','--out',str(root/'device-test.apk'),'app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk'],check=True)
+          verify(root/'device-test.apk')
+          (root/'verification.json').write_text(json.dumps({'release_url':expected,'sha256':digest,'certificate_sha256':cert,'debuggable':False,'version_name':info['version_name'],'version_code':info['version_code']},ensure_ascii=False,indent=2))
+          print('公开正式包校验通过；只对独立测试包重新签名，正式包字节保持原样。')
+          PY
+      - name: 启用模拟器硬件加速
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: 正式包安装启动与八项设备检查
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: bash tools/run_release_device_tests.sh
+      - name: 保存正式包设备验收证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainShield-release-device-evidence
+          path: |
+            release-device/verification.json
+            release-device/apk-signature.txt
+            release-device/apk-badging.txt
+            release-device/device-results.txt
+            release-device/device-logcat.txt
+            release-device/device-screen.png
+          if-no-files-found: ignore

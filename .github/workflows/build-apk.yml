@@ -1,0 +1,120 @@
+name: 链盾安装包构建与设备回归
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths-ignore: ['updates/**']
+permissions:
+  contents: read
+jobs:
+  build:
+    name: 编译安装包与自动回归
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 安装安卓构建工具
+        run: sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+      - name: 检查应用资源一致性
+        run: |
+          node --check app/src/main/assets/app.js
+          node --check app/src/main/assets/maintenance.js
+          python3 - <<'PY'
+          from pathlib import Path
+          for name in ('engine.py','runtime_policy.py'):
+              assert Path(name).read_bytes()==Path('app/src/main/python',name).read_bytes()
+          print('应用资源一致性检查通过')
+          PY
+      - name: 离线安全回归与签名校验
+        run: |
+          python3 -m unittest discover -s tests -v
+          python3 tools/check_signature.py
+      - name: 手机页面中文与交互回归
+        run: |
+          python3 -m pip install playwright==1.58.0
+          python3 -m playwright install --with-deps chromium
+          python3 tests/browser_smoke.py
+          python3 tests/browser_maintenance.py
+      - name: 检查六项真实接口
+        continue-on-error: true
+        env:
+          GOPLUS_ACCESS_TOKEN: ${{ secrets.GOPLUS_ACCESS_TOKEN }}
+          HONEYPOT_API_KEY: ${{ secrets.HONEYPOT_API_KEY }}
+          RUGCHECK_API_KEY: ${{ secrets.RUGCHECK_API_KEY }}
+        run: |
+          set -o pipefail
+          python3 tools/channel_live_check.py | tee live-api-status.json
+      - name: 编译测试版、未签名正式版及设备测试包
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:lintRelease
+      - name: 保存真实编译产物
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainShield-Android-build
+          path: |
+            app/build/outputs/apk/debug/app-debug.apk
+            app/build/outputs/apk/release/app-release-unsigned.apk
+            app/build/outputs/apk/androidTest/debug/*.apk
+          if-no-files-found: error
+      - name: 保存接口与静态检查报告
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainShield-build-reports
+          path: |
+            live-api-status.json
+            app/build/reports/lint-results-release.*
+          if-no-files-found: ignore
+  device:
+    name: 安卓模拟器安装与真实三链查询
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          name: ChainShield-Android-build
+          path: device-build
+      - name: 启用模拟器硬件加速
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: 安装、启动、中文界面、维护签名及三链一键查询
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: default
+          profile: pixel_2
+          disable-animations: true
+          emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
+          script: |
+            adb install device-build/debug/app-debug.apk
+            adb install device-build/androidTest/debug/app-debug-androidTest.apk
+            adb shell am instrument -w com.chainshield.app.test/com.chainshield.app.SmokeInstrumentation > device-results.txt
+            cat device-results.txt
+            python3 tools/check_device_result.py device-results.txt
+      - name: 保存设备日志
+        if: always()
+        run: adb logcat -d > device-logcat.txt || true
+      - name: 保存设备测试证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ChainShield-device-evidence
+          path: |
+            device-results.txt
+            device-logcat.txt
+          if-no-files-found: ignore

@@ -1,0 +1,48 @@
+plugins {
+    id 'com.android.application'
+    id 'com.chaquo.python'
+}
+android {
+    namespace 'com.chainshield.app'
+    compileSdk 35
+    buildToolsVersion '35.0.0'
+    buildFeatures { buildConfig true }
+    defaultConfig {
+        applicationId 'com.chainshield.app'
+        minSdk 24
+        targetSdk 35
+        versionCode 8
+        versionName '1.6.1'
+        testInstrumentationRunner 'com.chainshield.app.SmokeInstrumentation'
+        ndk {
+            // Both ABI families commonly used by modern Android phones.
+            abiFilters 'arm64-v8a', 'armeabi-v7a', 'x86_64'
+        }
+    }
+    signingConfigs {
+        stable {
+            storeFile file(System.getenv('CHAINSHIELD_KEYSTORE') ?: 'missing-release-key.p12')
+            storePassword System.getenv('CHAINSHIELD_STORE_PASSWORD') ?: ''
+            keyAlias System.getenv('CHAINSHIELD_KEY_ALIAS') ?: 'chainshield'
+            keyPassword System.getenv('CHAINSHIELD_KEY_PASSWORD') ?: ''
+        }
+    }
+    buildTypes {
+        release {
+            minifyEnabled false
+            // CI can compile an unsigned release for local, private-key signing.
+            // The publishing workflow always requires the fixed keystore.
+            if (System.getenv('CHAINSHIELD_KEYSTORE')) signingConfig signingConfigs.stable
+        }
+    }
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+chaquopy {
+    defaultConfig {
+        version = '3.11'
+        if (System.getenv('CHAINSHIELD_BUILD_PYTHON')) buildPython(System.getenv('CHAINSHIELD_BUILD_PYTHON'))
+    }
+}

@@ -1,0 +1,68 @@
+name: 编译并发布固定签名正式安装包
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: write
+  actions: write
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 自动回归和签名校验检查
+        run: |
+          python3 -m unittest discover -s tests -v
+          python3 tools/check_signature.py
+          node --check app/src/main/assets/app.js
+          node --check app/src/main/assets/maintenance.js
+      - name: 编译固定签名安装包
+        env:
+          CHAINSHIELD_KEYSTORE_BASE64: ${{ secrets.CHAINSHIELD_KEYSTORE_BASE64 }}
+          CHAINSHIELD_STORE_PASSWORD: ${{ secrets.CHAINSHIELD_STORE_PASSWORD }}
+          CHAINSHIELD_KEY_PASSWORD: ${{ secrets.CHAINSHIELD_KEY_PASSWORD }}
+          CHAINSHIELD_KEY_ALIAS: ${{ secrets.CHAINSHIELD_KEY_ALIAS }}
+        run: |
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          python3 - <<'PY'
+          import base64, json, os, subprocess, tempfile
+          from pathlib import Path
+          if not os.environ['CHAINSHIELD_KEYSTORE_BASE64'].strip(): raise SystemExit('缺少固定签名密钥，拒绝发布随机签名版本')
+          with tempfile.TemporaryDirectory() as d:
+              key=Path(d)/'release.p12'
+              key.write_bytes(base64.b64decode(os.environ['CHAINSHIELD_KEYSTORE_BASE64'],validate=True))
+              key.chmod(0o600)
+              env=dict(os.environ,CHAINSHIELD_KEYSTORE=str(key))
+              os.chmod('gradlew',0o755)
+              subprocess.run(['./gradlew','--no-daemon',':app:assembleRelease',':app:lintRelease'],env=env,check=True)
+          PY
+      - name: 发布安装包与中文元数据
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python3 - <<'PY'
+          import hashlib,json,os,re,subprocess
+          from pathlib import Path
+          gradle=Path('app/build.gradle').read_text()
+          name=re.search(r"versionName '([^']+)'",gradle).group(1)
+          code=int(re.search(r'versionCode (\d+)',gradle).group(1))
+          tag='v'+name
+          if os.environ.get('GITHUB_REF_TYPE')=='tag' and os.environ.get('GITHUB_REF_NAME')!=tag: raise SystemExit('版本标签与安装包版本不一致')
+          apk=Path('app/build/outputs/apk/release/app-release.apk')
+          notes=Path('maintenance/版本说明.md')
+          info={'version_code':code,'version_name':name,'release_url':'https://github.com/'+os.environ['GITHUB_REPOSITORY']+'/releases/tag/'+tag,'sha256':hashlib.sha256(apk.read_bytes()).hexdigest(),'notes_zh':notes.read_text()[:1500]}
+          Path('chainshield-release-info.json').write_text(json.dumps(info,ensure_ascii=False))
+          subprocess.run(['gh','release','create',tag,str(apk),'chainshield-release-info.json','--title','链盾 '+name,'--notes-file',str(notes)],check=True)
+          subprocess.run(['gh','workflow','run','maintenance.yml','--ref','main'],check=True)
+          PY

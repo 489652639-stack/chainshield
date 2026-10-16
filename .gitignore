@@ -1,0 +1,15 @@
+.gradle/
+**/build/
+local.properties
+__pycache__/
+*.pyc
+*.apk
+*.jks
+*.keystore
+.idea/
+.rsync-tmp/
+*.p12
+*.pem
+credentials.json
+_site/
+chainshield-signing-private/

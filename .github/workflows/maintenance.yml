@@ -1,0 +1,100 @@
+name: 自动维护检查与签名配置发布
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: '17 */6 * * *'
+  push:
+    branches: [main]
+    paths: ['maintenance/**', 'runtime_policy.py', 'tools/**', '.github/workflows/maintenance.yml']
+permissions:
+  contents: read
+concurrency:
+  group: maintenance-channel
+  cancel-in-progress: false
+jobs:
+  verify:
+    name: 自动检查三链接口
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - name: 离线回归与生产签名校验器测试
+        run: |
+          python3 -m unittest discover -s tests -v
+          python3 tools/check_signature.py
+      - name: 使用候选配置检查六项真实接口
+        env:
+          GOPLUS_ACCESS_TOKEN: ${{ secrets.GOPLUS_ACCESS_TOKEN }}
+          HONEYPOT_API_KEY: ${{ secrets.HONEYPOT_API_KEY }}
+          RUGCHECK_API_KEY: ${{ secrets.RUGCHECK_API_KEY }}
+        run: |
+          set -o pipefail
+          python3 tools/channel_live_check.py | tee live-api-status.json
+      - name: 保存接口检查证据
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: 维护接口检查记录
+          path: live-api-status.json
+          if-no-files-found: ignore
+  publish:
+    name: 更新经过签名的维护配置
+    needs: verify
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: main
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - id: key
+        name: 检查维护签名密钥是否已配置
+        env:
+          MAINTENANCE_PRIVATE_KEY: ${{ secrets.MAINTENANCE_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os
+          enabled=bool(os.environ['MAINTENANCE_PRIVATE_KEY'].strip())
+          with open(os.environ['GITHUB_OUTPUT'],'a') as f: f.write('enabled='+str(enabled).lower()+chr(10))
+          message='维护签名密钥已配置，将发布通过检查的新配置。' if enabled else '尚未配置维护签名密钥：本次仅完成健康检查，没有续签或发布在线配置。'
+          print(message)
+          with open(os.environ['GITHUB_STEP_SUMMARY'],'a') as f: f.write(message+chr(10))
+          PY
+      - name: 读取最新正式版本信息
+        if: steps.key.outputs.enabled == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: python3 tools/channel_release_info.py
+      - name: 签发十四天有效的维护配置
+        if: steps.key.outputs.enabled == 'true'
+        env:
+          MAINTENANCE_PRIVATE_KEY: ${{ secrets.MAINTENANCE_PRIVATE_KEY }}
+        run: |
+          python3 - <<'PY'
+          import os, subprocess, tempfile
+          from pathlib import Path
+          with tempfile.TemporaryDirectory() as d:
+              key=Path(d)/'key.pem'
+              key.write_text(os.environ['MAINTENANCE_PRIVATE_KEY'])
+              key.chmod(0o600)
+              subprocess.run(['python3','tools/build_channel.py','--private-key',str(key),'--output','updates/channel.json'],check=True)
+          PY
+      - name: 原子发布签名配置
+        if: steps.key.outputs.enabled == 'true'
+        run: |
+          git config user.name 'chainshield-maintenance[bot]'
+          git config user.email 'chainshield-maintenance[bot]@users.noreply.github.com'
+          git add updates/channel.json
+          git commit -m '自动续签通过接口检查的维护配置'
+          git push origin HEAD:main

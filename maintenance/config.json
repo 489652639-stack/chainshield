@@ -1,0 +1,1 @@
+{"paths":{"goplus_evm":"/api/v1/token_security/{chain}","goplus_sol":"/api/v1/solana/token_security","honeypot":"/v2/IsHoneypot","rugcheck":"/v1/tokens/{address}/report"},"disabled":[],"aliases":{},"translations":{},"sol_fee_unit":"ratio"}

@@ -20,6 +20,8 @@ jobs:
         with:
           python-version: '3.11'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
       - uses: gradle/actions/setup-gradle@v4
       - name: 自动回归和签名校验检查
         run: |

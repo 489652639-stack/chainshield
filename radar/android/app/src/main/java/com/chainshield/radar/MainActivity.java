@@ -3,6 +3,10 @@ package com.chainshield.radar;
 import android.app.Activity;
 import android.os.Bundle;
 import android.content.SharedPreferences;
+import android.content.Intent;
+import android.graphics.Insets;
+import android.os.Build;
+import android.view.WindowInsets;
 import android.webkit.*;
 import java.net.*;
 import java.io.*;
@@ -19,6 +23,10 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences("connection", MODE_PRIVATE);
         web = new WebView(this);
         web.setBackgroundColor(0xff0b1420);
+        if (Build.VERSION.SDK_INT >= 35) web.setOnApplyWindowInsetsListener((view,insets)->{
+            Insets bars=insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
+            view.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;
+        });
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setAllowFileAccess(false);
@@ -26,7 +34,12 @@ public final class MainActivity extends Activity {
         web.getSettings().setMixedContentMode(WebSettings.MIXED_CONTENT_NEVER_ALLOW);
         web.addJavascriptInterface(new Bridge(), "Native");
         web.setWebViewClient(new WebViewClient() {
-            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest r) { return true; }
+            @Override public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest r) {
+                if (r.isForMainFrame() && "https".equals(r.getUrl().getScheme()) && !HOST.equals(r.getUrl().getHost())) {
+                    try { startActivity(new Intent(Intent.ACTION_VIEW,r.getUrl())); } catch (Exception ignored) { }
+                }
+                return true;
+            }
             @Override public WebResourceResponse shouldInterceptRequest(WebView v, WebResourceRequest r) {
                 String path = r.getUrl().getPath();
                 if (!"https".equals(r.getUrl().getScheme()) || !HOST.equals(r.getUrl().getHost()) || !Arrays.asList("/index.html","/app.js","/app.css").contains(path))

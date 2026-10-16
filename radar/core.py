@@ -162,6 +162,8 @@ class Radar:
         with self.store.lock:
             self.store.db.execute('BEGIN IMMEDIATE')
             try:
+                if self.store.get('enabled') != 'true':
+                    raise ValueError('模拟入场已暂停')
                 cash = D(self.store.get('cash'))
                 count = self.store.rows('SELECT COUNT(*) AS n FROM positions WHERE closed IS NULL')[0]['n']
                 if count >= 5 or cash < cost + fee or self.store.rows('SELECT id FROM positions WHERE mint=?', (mint,)):

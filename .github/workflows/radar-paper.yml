@@ -1,0 +1,107 @@
+name: 热点雷达模拟版构建验收
+on:
+  push:
+    branches: ['feature/radar-paper-*']
+    paths: ['radar/**', '.github/workflows/radar-paper.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - uses: android-actions/setup-android@v3
+      - uses: gradle/actions/setup-gradle@v4
+      - name: 原链盾和热点流程自动回归
+        run: |
+          python3 -m unittest discover -s tests -v > radar/evidence/chainshield-tests.txt 2>&1
+          python3 -m unittest discover -s radar/tests -v > radar/evidence/radar-tests.txt 2>&1
+          node --check radar/web/app.js
+      - name: 真实只读接口探针
+        continue-on-error: true
+        run: python3 -m radar.live_probe
+      - name: 为模拟器生成仅限调试构建的测试证书
+        run: |
+          openssl req -x509 -newkey rsa:2048 -nodes -keyout /tmp/radar-ci.key -out /tmp/radar-ci.crt -days 1 -subj '/CN=Radar CI' -addext 'subjectAltName=IP:10.0.2.2,IP:127.0.0.1' -addext 'basicConstraints=critical,CA:TRUE'
+          mkdir -p radar/android/app/src/debug/res/raw radar/android/app/src/debug/res/xml
+          cp /tmp/radar-ci.crt radar/android/app/src/debug/res/raw/radar_test_ca.crt
+          echo '<network-security-config><domain-config><domain>10.0.2.2</domain><trust-anchors><certificates src="@raw/radar_test_ca"/></trust-anchors></domain-config></network-security-config>' > radar/android/app/src/debug/res/xml/network_security_config.xml
+          echo '<manifest xmlns:android="http://schemas.android.com/apk/res/android"><application android:networkSecurityConfig="@xml/network_security_config"/></manifest>' > radar/android/app/src/debug/AndroidManifest.xml
+      - name: 真正编译安卓APK和测试包
+        run: |
+          sdkmanager 'platforms;android-35' 'build-tools;35.0.0'
+          chmod +x gradlew
+          ./gradlew -p radar/android --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:lintRelease
+          mkdir -p radar/artifacts
+          cp radar/android/app/build/outputs/apk/debug/app-debug.apk radar/artifacts/ChainShield-Radar-0.1.0-paper-debug.apk
+          sha256sum radar/artifacts/*.apk > radar/evidence/apk-sha256.txt
+      - name: 启用模拟器硬件加速
+        run: |
+          echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
+          sudo udevadm control --reload-rules
+          sudo udevadm trigger --name-match=kvm
+      - name: 模拟器安装、四页面、真实服务器和一键查询
+        uses: reactivecircus/android-emulator-runner@v2
+        with:
+          api-level: 30
+          arch: x86_64
+          target: default
+          disable-animations: true
+          script: bash radar/device_test.sh
+      - name: 移除调试专用信任后构建交付安装包
+        if: success()
+        run: |
+          rm -rf radar/android/app/src/debug
+          ./gradlew -p radar/android --no-daemon :app:assembleDebug
+          cp radar/android/app/build/outputs/apk/debug/app-debug.apk radar/artifacts/ChainShield-Radar-0.1.0-paper-debug.apk
+          sha256sum radar/artifacts/*.apk > radar/evidence/apk-sha256.txt
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ChainShield-Radar-paper
+          path: |
+            radar/artifacts/*.apk
+            radar/evidence/
+            radar/android/app/build/reports/lint-results-release.*
+          if-no-files-found: warn
+  audit-a:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+      - name: 固定提交获取候选A并只安装依赖
+        run: |
+          git clone https://github.com/agentcomponents/solana-trading-bot.git /tmp/candidate-a
+          cd /tmp/candidate-a
+          git checkout 305f6769c0a0bee13aa515b69bd9393babf62ac5
+          npm install --ignore-scripts
+          npm rebuild better-sqlite3 --build-from-source
+      - name: 保留原版编译和测试真实结果
+        run: |
+          mkdir -p /tmp/audit-evidence
+          cd /tmp/candidate-a
+          set +e
+          npm run build > /tmp/audit-evidence/build.txt 2>&1
+          echo $? > /tmp/audit-evidence/build-exit.txt
+          timeout 180 npx vitest run --exclude 'tests/integration/**' --reporter=json --outputFile=/tmp/audit-evidence/tests.json > /tmp/audit-evidence/tests.txt 2>&1
+          echo $? > /tmp/audit-evidence/test-exit.txt
+          npm audit --json > /tmp/audit-evidence/dependencies.json
+          exit 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: Candidate-A-audit
+          path: /tmp/audit-evidence/

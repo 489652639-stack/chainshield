@@ -19,11 +19,15 @@
 
 每六小时自动执行离线安全回归、真实接口检查。六项接口均通过且 Actions 已配置维护签名密钥时，才续签十四天有效的配置并发布；缺少密钥时会明确报告仅完成健康检查，没有续签。故障不会覆盖既有配置。
 
-云端构建、145 项回归、15 组页面检查、7 组密码学检查和 8 项 Android 11 模拟器检查已实际通过；完整运行见 https://github.com/489652639-stack/chainshield/actions/runs/38849052822 。自动续签仍需把单独备份的密钥写入 GitHub Actions Secrets，私钥不在公开仓库中。
+云端构建、145 项回归、15 组页面检查、7 组密码学检查和 8 项 Android 11 模拟器检查已实际通过，见 https://github.com/489652639-stack/chainshield/actions/runs/38849052822 。维护与 APK 签名所需五项 Secrets 已配置；两轮自动续签及正式签名发布均已实际成功，最新维护记录见 https://github.com/489652639-stack/chainshield/actions/runs/38857637325 ，正式发布记录见 https://github.com/489652639-stack/chainshield/actions/runs/38857556724 。私钥和密码不在公开仓库中。
+
+最终公开正式包的安装、启动与三链查询八项模拟器检查亦已通过，且设备 APK 哈希与公开原件一致：https://github.com/489652639-stack/chainshield/actions/runs/38858208506 。
 
 自动流程能更新受限的兼容配置，核心逻辑改版或新增授权要求仍需维护者修复并发布新版。
 
 ## 安装与签名
+
+正式 APK 与完整源码下载：https://github.com/489652639-stack/chainshield/releases/tag/v1.6.1 。正式包 SHA-256 为 `67561f1ca0e628bac8444406adb995534d2fcb81d8403f5dcc00d6005cbd8876`。
 
 本版使用独立、固定且已另行备份的安装包签名，关闭应用调试。只申请联网权限，不读取相册、联系人、定位或私钥，不连接钱包，不执行交易。
 

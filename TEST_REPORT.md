@@ -15,12 +15,16 @@ https://github.com/489652639-stack/chainshield/actions/runs/38849052822
 | 正式 APK | versionCode 8，1.6.1，固定签名，关闭调试，仅联网权限 |
 | 静态检查 | 0 错误、6 警告 |
 
-最终 APK SHA-256：`7e3ee2b6e751cb90a2d8290bdd65c2265242a5a4db8cc9ac0698af4a4e36d0e2`。
+最终 APK SHA-256：`67561f1ca0e628bac8444406adb995534d2fcb81d8403f5dcc00d6005cbd8876`。
 
-构建来源提交：`c1322f911328cd5e34915399a0c61d2bf52cf0a0`。正式 APK 在保密环境以与 1.6 相同的固定密钥签名；调试 APK 用于云端设备验收。不能把调试包测试说成最终正式包已完成实体手机验收。
+正式包来自提交 `ae253a95ce2489d659db663eeab9d124130e295e`，实际云端编译、固定签名及发布：https://github.com/489652639-stack/chainshield/actions/runs/38857556724 。正式下载页：https://github.com/489652639-stack/chainshield/releases/tag/v1.6.1 。包大小 47,131,620 字节，签名证书与 1.6 相同。下载文件、发布元数据及签名维护配置的哈希一致；全部十个应用资源与源码逐字节一致。
 
-实际更新地址：https://raw.githubusercontent.com/489652639-stack/chainshield/main/updates/channel.json 。已通过无登录 HTTP、固定公钥签名和原生模拟器读取。首份配置到 2026-10-30 03:56:23 UTC 有效。
+最终公开正式包的独立设备验收：https://github.com/489652639-stack/chainshield/actions/runs/38858208506 。八项全部通过；设备已安装 APK 的哈希与公开原件完全一致，未开启调试。BNB、ETH、SOL 均有两个真实来源，分别展示 24、24、17 项检测；日志未发现运行时崩溃标记。原件保持原样，只给独立测试包重新签名；该测试包不随正式包交付。
 
-自动检查已部署，每六小时运行。自动续签还缺 GitHub Actions 维护私钥；正式 APK 自动发布还缺四项安装包签名配置。当前日志明确跳过续签，不能声称长期自动发布已上线。私钥和密码均不在此仓库中。
+实际更新地址：https://raw.githubusercontent.com/489652639-stack/chainshield/main/updates/channel.json 。已通过无登录 HTTP 200、仓库固定 DER 公钥的实际 OpenSSL RSA-SHA256 验签、配置校验及正式包原生模拟器读取。当前序号 `1792129695`，有效至 2026-10-30 05:48:15 UTC，含 1.6.1 正式版本元数据。
+
+五项签名保密配置已获授权并保存在 Actions Secrets。两轮自动续签均实际成功，最新运行：https://github.com/489652639-stack/chainshield/actions/runs/38857637325 。六项真实接口全部通过，读取正式版本、签发和原子发布步骤实际成功，没有跳过。维护配置每六小时检查并按条件续签，APK 正式发布由版本标签或手动触发。私钥和密码不在仓库、安装包或公开报告中。
+
+已恢复每日异常巡检，正常不提醒，同一未变化问题不重复通知。自动流程可维护受限兼容配置，不能保证修复任意未来接口变化或永久无故障。
 
 “未知”保持未知；真实接口通过不等于代币安全。SOL 非零 Token-2022 费率样例尚未完成独立交叉验证。未测试全部实体手机、安卓版本或真实资金交易。

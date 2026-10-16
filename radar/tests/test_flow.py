@@ -84,6 +84,12 @@ class Flow(unittest.TestCase):
             with self.assertRaises(HTTPError) as err:urlopen(Request(base+'/api/live',data=b'{"mode":"live"}',headers={'Authorization':'Bearer '+'x'*32}))
             self.assertEqual(err.exception.code,400)
         finally:srv.shutdown();srv.server_close()
+    def test_pause_during_safety_check_prevents_inflight_entry(self):
+        original=self.api.check
+        def check(*args):
+            self.db.set('enabled','false')
+            return original(*args)
+        self.api.check=check;self.r.cycle();self.assertFalse(self.r.snapshot()['positions'])
     def test_entities_keep_events_without_cashtags(self):
         self.assertIn('nebulax',entities('Nebulax announces rocket'))
 

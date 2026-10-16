@@ -6,6 +6,7 @@ test_insufficient_cash_rolls_back (test_flow.Flow.test_insufficient_cash_rolls_b
 test_no_substring_or_wrong_chain_or_old_pool (test_flow.Flow.test_no_substring_or_wrong_chain_or_old_pool) ... ok
 test_no_trade_from_popular_coin_without_news (test_flow.Flow.test_no_trade_from_popular_coin_without_news) ... ok
 test_one_source_or_stale_news_cannot_buy (test_flow.Flow.test_one_source_or_stale_news_cannot_buy) ... ok
+test_pause_during_safety_check_prevents_inflight_entry (test_flow.Flow.test_pause_during_safety_check_prevents_inflight_entry) ... ok
 test_quote_outage_does_not_record_fill (test_flow.Flow.test_quote_outage_does_not_record_fill) ... ok
 test_risk_exit_and_failed_exit_remains_open (test_flow.Flow.test_risk_exit_and_failed_exit_remains_open) ... ok
 test_stop_loss_and_pause_preserves_exit (test_flow.Flow.test_stop_loss_and_pause_preserves_exit) ... ok
@@ -14,6 +15,6 @@ test_take_profit_atomic_accounting_and_single_exit (test_flow.Flow.test_take_pro
 test_unknown_and_high_risk_block (test_flow.Flow.test_unknown_and_high_risk_block) ... ok
 
 ----------------------------------------------------------------------
-Ran 14 tests in 0.180s
+Ran 15 tests in 0.657s
 
 OK

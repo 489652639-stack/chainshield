@@ -9,5 +9,24 @@ trap 'kill "$server_pid" "$tls_pid" 2>/dev/null || true' EXIT
 adb install -r radar/android/app/build/outputs/apk/debug/app-debug.apk
 adb install -r radar/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb shell am instrument -w com.chainshield.radar.test/com.chainshield.radar.SmokeTest | tee radar/evidence/device-results.txt
-rg 'INSTRUMENTATION_CODE: -1' radar/evidence/device-results.txt
-! rg 'INSTRUMENTATION_CODE: 0|错误=' radar/evidence/device-results.txt
+python3 - <<'CHECK'
+from pathlib import Path
+s=Path('radar/evidence/device-results.txt').read_text()
+assert 'INSTRUMENTATION_CODE: -1' in s and 'INSTRUMENTATION_CODE: 0' not in s and '错误=' not in s
+CHECK
+# Deliver without CI-only certificate trust, then reinstall/start these exact bytes.
+rm -rf radar/android/app/src/debug
+./gradlew -p radar/android --no-daemon :app:assembleDebug
+cp radar/android/app/build/outputs/apk/debug/app-debug.apk radar/artifacts/ChainShield-Radar-0.1.0-paper-debug.apk
+sha256sum radar/artifacts/*.apk > radar/evidence/apk-sha256.txt
+adb install -r radar/artifacts/ChainShield-Radar-0.1.0-paper-debug.apk
+adb shell am force-stop com.chainshield.radar
+adb shell am start -W -n com.chainshield.radar/.MainActivity | tee radar/evidence/final-apk-launch.txt
+python3 - <<'CHECK'
+from pathlib import Path
+from zipfile import ZipFile
+assert 'Status: ok' in Path('radar/evidence/final-apk-launch.txt').read_text()
+with ZipFile('radar/artifacts/ChainShield-Radar-0.1.0-paper-debug.apk') as z:
+    assert not any('radar_test_ca' in name or 'network_security_config' in name for name in z.namelist())
+print('交付APK重新安装启动通过；未包含CI测试CA信任')
+CHECK

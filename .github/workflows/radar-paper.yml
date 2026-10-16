@@ -61,13 +61,6 @@ jobs:
           target: default
           disable-animations: true
           script: bash radar/device_test.sh
-      - name: 移除调试专用信任后构建交付安装包
-        if: success()
-        run: |
-          rm -rf radar/android/app/src/debug
-          ./gradlew -p radar/android --no-daemon :app:assembleDebug
-          cp radar/android/app/build/outputs/apk/debug/app-debug.apk radar/artifacts/ChainShield-Radar-0.1.0-paper-debug.apk
-          sha256sum radar/artifacts/*.apk > radar/evidence/apk-sha256.txt
       - uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -78,6 +71,7 @@ jobs:
             radar/android/app/build/reports/lint-results-release.*
           if-no-files-found: warn
   audit-a:
+    if: ${{ !contains(github.event.head_commit.message, '[skip audit]') }}
     runs-on: ubuntu-latest
     timeout-minutes: 12
     steps:

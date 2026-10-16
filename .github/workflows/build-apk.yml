@@ -102,15 +102,7 @@ jobs:
           profile: pixel_2
           disable-animations: true
           emulator-options: -no-window -gpu swiftshader_indirect -no-snapshot -noaudio -no-boot-anim -camera-back none
-          script: |
-            adb install device-build/debug/app-debug.apk
-            adb install device-build/androidTest/debug/app-debug-androidTest.apk
-            adb shell am instrument -w com.chainshield.app.test/com.chainshield.app.SmokeInstrumentation > device-results.txt
-            cat device-results.txt
-            python3 tools/check_device_result.py device-results.txt
-      - name: 保存设备日志
-        if: always()
-        run: adb logcat -d > device-logcat.txt || true
+          script: bash tools/run_device_tests.sh
       - name: 保存设备测试证据
         if: always()
         uses: actions/upload-artifact@v4

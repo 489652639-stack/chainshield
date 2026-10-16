@@ -19,7 +19,7 @@
 
 每六小时自动执行离线安全回归、真实接口检查。六项接口均通过且 Actions 已配置维护签名密钥时，才续签十四天有效的配置并发布；缺少密钥时会明确报告仅完成健康检查，没有续签。故障不会覆盖既有配置。
 
-首次云端构建和模拟器测试正在验证，实际结果以 `TEST_REPORT.md` 及 Actions 记录为准。源码中的流程定义不代表已经运行通过。自动续签仍需把单独备份的密钥写入 GitHub Actions Secrets，私钥不在公开仓库中。
+云端构建、145 项回归、15 组页面检查、7 组密码学检查和 8 项 Android 11 模拟器检查已实际通过；完整运行见 https://github.com/489652639-stack/chainshield/actions/runs/38849052822 。自动续签仍需把单独备份的密钥写入 GitHub Actions Secrets，私钥不在公开仓库中。
 
 自动流程能更新受限的兼容配置，核心逻辑改版或新增授权要求仍需维护者修复并发布新版。
 
@@ -55,4 +55,4 @@ python3 tools/channel_live_check.py
 ./gradlew --no-daemon :app:assembleRelease :app:lintRelease
 ```
 
-安装包位于 `app/build/outputs/apk/release/app-release.apk`。维护发布细节见 `maintenance/更新说明.md`。
+已配置固定密钥时，安装包位于 `app/build/outputs/apk/release/app-release.apk`。未配置密钥时只会生成 `app-release-unsigned.apk`，供保密签名使用，不能作为可安装正式包交付。维护发布细节见 `maintenance/更新说明.md`。

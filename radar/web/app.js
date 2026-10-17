@@ -8,7 +8,7 @@ function sourceName(s){return sourceNames[s]||s;}
 function message(s){$('message').textContent=s;$('message').style.display='block';setTimeout(()=>{$('message').style.display='none';},6000);}
 function card(parent,title,detail,style=''){const a=document.createElement('article');a.className=style;const b=document.createElement('strong');b.textContent=title;a.append(b);const p=document.createElement('p');p.textContent=detail;a.append(p);parent.append(a);return a;}
 function time(t){return t?new Date(t*1000).toLocaleString('zh-CN'):'等待扫描';}
-function newsLink(parent,url){try{const u=new URL(url);if(u.protocol==='https:'){const a=document.createElement('a');a.textContent='查看新闻原文';a.href=u.href;a.rel='noopener noreferrer';parent.append(a);}}catch{}}
+function newsLink(parent,url){try{const u=new URL(url);if(u.protocol==='https:'){const a=document.createElement('a');a.textContent='查看原文';a.href=u.href;a.rel='noopener noreferrer';parent.append(a);}}catch{}}
 async function api(path,body){let data;if(window.Native){data=JSON.parse(window.Native.request(path,body?JSON.stringify(body):''));}else{const r=await fetch(path,{method:body?'POST':'GET',headers:{Authorization:'Bearer '+sessionStorage.getItem('radar-token'),'Content-Type':'application/json'},body:body?JSON.stringify(body):undefined});data=await r.json();}if(data.error)throw Error(data.error);return data;}
 function show(page){document.querySelectorAll('.page').forEach(s=>s.hidden=s.id!==page);document.querySelectorAll('nav button').forEach(b=>{b.classList.toggle('active',b.dataset.page===page);b.setAttribute('aria-current',b.dataset.page===page?'page':'false');});document.querySelector('h1').textContent={radar:'热点雷达',shield:'链盾检查',trade:'自动交易',settings:'系统设置'}[page];window.scrollTo(0,0);}
 async function refresh(){
@@ -27,6 +27,14 @@ async function refresh(){
         $('topics').replaceChildren();
         for(const t of state.topics){const a=card($('topics'),t.entity,'发现于 '+time(t.created)+' · '+t.status);for(const e of t.evidence){const p=document.createElement('p');p.textContent=sourceName(e.origin)+' · '+e.title;a.append(p);newsLink(a,e.url);}}
         if(!state.topics.length)card($('topics'),'暂未发现达标热点','新闻仍会显示在下方。只有新闻先触发热点，才会继续匹配新币。');
+        $('social-messages').replaceChildren();$('social-accounts').replaceChildren();
+        const social=state.social;
+        $('social-note').textContent=social?social.state:'当前服务器尚未部署人物消息接入版本。';
+        if(social){
+            for(const m of social.messages||[]){const a=card($('social-messages'),m.name+' · '+m.platform+' · '+time(m.published),m.text);const p=document.createElement('p');p.textContent=m.provider+' · 接收于 '+time(m.received);a.append(p);newsLink(a,m.url);}
+            for(const a of social.accounts||[])card($('social-accounts'),a.name+' · @'+a.handle,a.platform+' · '+a.state+(a.last_received?' · '+time(a.last_received):''));
+        }
+        if(!social||(social.messages||[]).length===0)card($('social-messages'),'尚未收到人物消息','已加入监控名单不代表服务器已接通。消息通道接通后，这里显示实际收到的原文。');
         $('news').replaceChildren();
         for(const n of state.news||[]){const a=card($('news'),n.title,sourceName(n.origin)+' · '+time(n.published));newsLink(a,n.url);}
         if(!state.news)card($('news'),'服务器需要更新','当前后台尚未提供新闻明细，其他功能仍可使用。');

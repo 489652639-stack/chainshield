@@ -65,9 +65,14 @@ def make_handler(radar, token):
                 return self.send(400, {'error': '请求格式不支持'})
             try:
                 length = int(self.headers.get('Content-Length', '0'))
-                if not 0 < length <= 1024:
+                if not 0 < length <= (60000 if self.path == '/api/social/import' else 1024):
                     raise ValueError()
                 body = json.loads(self.rfile.read(length))
+                if self.path == '/api/social/import':
+                    try:
+                        return self.send(200, radar.ingest_social(body.get('messages')))
+                    except ValueError as exc:
+                        return self.send(400, {'error': str(exc)})
                 if self.path != '/api/entry' or type(body.get('enabled')) is not bool:
                     raise ValueError()
                 radar.store.set('enabled', str(body['enabled']).lower())

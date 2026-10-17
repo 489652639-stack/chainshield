@@ -9,6 +9,7 @@ import time
 import unicodedata
 from decimal import Decimal, ROUND_DOWN
 from urllib.parse import urlsplit
+from radar.social import WATCHLIST, validate_batch
 
 D = Decimal
 USDC = 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v'
@@ -80,6 +81,7 @@ class Store:
         CREATE TABLE IF NOT EXISTS topics (id TEXT PRIMARY KEY, entity TEXT, created REAL, evidence TEXT, status TEXT);
         CREATE TABLE IF NOT EXISTS attempts (topic TEXT, mint TEXT, at REAL, status TEXT, detail TEXT, PRIMARY KEY(topic,mint));
         CREATE TABLE IF NOT EXISTS positions (id INTEGER PRIMARY KEY, topic TEXT, mint TEXT UNIQUE, symbol TEXT, raw TEXT, cost TEXT, fee TEXT, opened REAL, closed REAL, proceeds TEXT, pnl TEXT, reason TEXT, note TEXT);
+        CREATE TABLE IF NOT EXISTS social_messages (id TEXT PRIMARY KEY, platform TEXT, handle TEXT, name TEXT, text TEXT, url TEXT, published REAL, received REAL, kind TEXT, provider TEXT);
         INSERT OR IGNORE INTO kv VALUES ('cash','1000');
         INSERT OR IGNORE INTO kv VALUES ('enabled','true');
         ''')
@@ -104,6 +106,46 @@ class Radar:
         self.store, self.api, self.clock = store, api, clock
         self.cycle_lock = threading.Lock()
         self.last = {'state': '等待首轮扫描', 'at': None, 'error': None}
+
+    def ingest_social(self, items):
+        """Authenticated operator/relay input, independent of RSS domain quorum."""
+        now = self.clock()
+        messages = validate_batch(items, now)
+        added = 0
+        with self.store.lock:
+            self.store.db.execute('BEGIN IMMEDIATE')
+            try:
+                for m in messages:
+                    cursor = self.store.execute('INSERT OR IGNORE INTO social_messages VALUES (?,?,?,?,?,?,?,?,?,?)',
+                        (m['id'], m['platform'], m['handle'], m['name'], m['text'], m['url'],
+                         m['published'], now, m['kind'], 'GMGN人工或转发导入；尚未独立核验原帖'))
+                    if not cursor.rowcount:
+                        continue
+                    added += 1
+                    # Reposts/profile changes remain visible without being misattributed as speech.
+                    if m['kind'] in ('post', 'reply', 'quote'):
+                        evidence = json.dumps([{'title': m['text'], 'url': m['url'],
+                            'origin': m['platform'] + ' @' + m['handle'], 'published': m['published']}], ensure_ascii=False)
+                        for entity in entities(m['text']):
+                            tid = fingerprint(entity, ['person', time.strftime('%Y-%m-%d', time.gmtime(now))])
+                            self.store.execute('INSERT OR IGNORE INTO topics VALUES (?,?,?,?,?)',
+                                (tid, entity, now, evidence, '人物言论线索；关联不代表本人认可'))
+                self.store.execute('DELETE FROM social_messages WHERE received<?', (now - 7 * 86400,))
+                self.store.db.execute('COMMIT')
+            except Exception:
+                self.store.db.execute('ROLLBACK')
+                raise
+        return {'accepted': added, 'duplicates': len(messages) - added, 'mode': '模拟交易'}
+
+    def social_snapshot(self):
+        recent = self.store.rows('SELECT * FROM social_messages ORDER BY published DESC LIMIT 50')
+        accounts = []
+        for platform, handle, name in WATCHLIST:
+            last = self.store.rows('SELECT MAX(received) AS at FROM social_messages WHERE platform=? AND handle=?', (platform, handle))[0]['at']
+            accounts.append(dict(platform=platform, handle=handle, name=name, last_received=last,
+                                 state='已有导入记录；持续采集尚未连接' if last else '等待消息通道连接'))
+        return dict(state='GMGN持续消息通道尚未连接', connected=False,
+                    accounts=accounts, messages=recent)
 
     def ingest(self, items):
         now = self.clock()
@@ -234,6 +276,7 @@ class Radar:
                 p['evidence'] = json.loads(p.pop('note'))
             return {'mode': '模拟交易', 'live_available': False, 'enabled': self.store.get('enabled') == 'true', 'cash_usdc': self.store.get('cash'),
                     'budget_cny': 100, 'last': dict(self.last), 'health': dict(getattr(self.api, 'health', {})),
+                    'social': self.social_snapshot(),
                     'counts': {'news': self.store.rows('SELECT COUNT(*) AS n FROM signals')[0]['n'],
                                'topics': self.store.rows('SELECT COUNT(*) AS n FROM topics')[0]['n'],
                                'attempts': self.store.rows('SELECT COUNT(*) AS n FROM attempts')[0]['n'],

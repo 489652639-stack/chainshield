@@ -1,0 +1,7 @@
+Starting: Intent { cmp=com.chainshield.radar/.MainActivity }
+Status: ok
+LaunchState: COLD
+Activity: com.chainshield.radar/.MainActivity
+TotalTime: 457
+WaitTime: 460
+Complete

@@ -36,7 +36,7 @@ python3 - <<'CHECK'
 from pathlib import Path
 from zipfile import ZipFile
 assert 'Status: ok' in Path('radar/evidence/final-apk-launch.txt').read_text()
-with ZipFile('radar/artifacts/ChainShield-Radar-0.1.0-paper-debug.apk') as z:
+with ZipFile('radar/artifacts/ChainShield-Radar-0.1.1-paper-debug.apk') as z:
     assert not any('radar_test_ca' in name or 'network_security_config' in name for name in z.namelist())
 print('交付APK重新安装启动通过；未包含CI测试CA信任')
 CHECK

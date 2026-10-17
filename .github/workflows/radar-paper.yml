@@ -46,17 +46,17 @@ jobs:
           chmod +x gradlew
           ./gradlew -p radar/android --no-daemon :app:assembleDebug :app:assembleDebugAndroidTest :app:assembleRelease :app:lintRelease
           mkdir -p radar/artifacts
-          cp radar/android/app/build/outputs/apk/debug/app-debug.apk radar/artifacts/ChainShield-Radar-0.1.0-paper-debug.apk
+          cp radar/android/app/build/outputs/apk/debug/app-debug.apk radar/artifacts/ChainShield-Radar-0.1.1-paper-debug.apk
           sha256sum radar/artifacts/*.apk > radar/evidence/apk-sha256.txt
       - name: 启用模拟器硬件加速
         run: |
           echo 'KERNEL=="kvm", GROUP="kvm", MODE="0666", OPTIONS+="static_node=kvm"' | sudo tee /etc/udev/rules.d/99-kvm4all.rules
           sudo udevadm control --reload-rules
           sudo udevadm trigger --name-match=kvm
-      - name: 模拟器安装、四页面、真实服务器和一键查询
+      - name: 安卓15三键导航、真实服务器和一键查询
         uses: reactivecircus/android-emulator-runner@v2
         with:
-          api-level: 30
+          api-level: 35
           arch: x86_64
           target: default
           disable-animations: true

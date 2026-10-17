@@ -7,6 +7,10 @@ import android.content.Intent;
 import android.graphics.Insets;
 import android.os.Build;
 import android.view.WindowInsets;
+import android.view.WindowInsetsController;
+import android.view.WindowManager;
+import android.widget.FrameLayout;
+import android.graphics.drawable.ColorDrawable;
 import android.webkit.*;
 import java.net.*;
 import java.io.*;
@@ -23,10 +27,25 @@ public final class MainActivity extends Activity {
         prefs = getSharedPreferences("connection", MODE_PRIVATE);
         web = new WebView(this);
         web.setBackgroundColor(0xff0b1420);
-        if (Build.VERSION.SDK_INT >= 35) web.setOnApplyWindowInsetsListener((view,insets)->{
-            Insets bars=insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout());
-            view.setPadding(bars.left,bars.top,bars.right,bars.bottom);return insets;
-        });
+        // Resize the WebView viewport, rather than padding its HTML scroll area.
+        // Fixed HTML navigation otherwise remains behind Android's navigation bar.
+        FrameLayout frame = new FrameLayout(this);
+        frame.setBackgroundColor(0xff0b1420);
+        frame.addView(web,new FrameLayout.LayoutParams(-1,-1));
+        getWindow().setBackgroundDrawable(new ColorDrawable(0xff0b1420));
+        getWindow().setStatusBarColor(0xff0b1420);
+        getWindow().setNavigationBarColor(0xff0b1420);
+        getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
+        getWindow().getDecorView().setSystemUiVisibility(0);
+        if (Build.VERSION.SDK_INT >= 29) getWindow().setNavigationBarContrastEnforced(false);
+        if (Build.VERSION.SDK_INT >= 30) {
+            getWindow().setDecorFitsSystemWindows(false);
+            frame.setOnApplyWindowInsetsListener((view,insets)->{
+                Insets bars=insets.getInsets(WindowInsets.Type.systemBars() | WindowInsets.Type.displayCutout() | WindowInsets.Type.ime());
+                view.setPadding(bars.left,bars.top,bars.right,bars.bottom);
+                return WindowInsets.CONSUMED;
+            });
+        }
         web.getSettings().setJavaScriptEnabled(true);
         web.getSettings().setDomStorageEnabled(true);
         web.getSettings().setAllowFileAccess(false);
@@ -49,7 +68,11 @@ public final class MainActivity extends Activity {
                 } catch (IOException e) { return response(404,"text/plain",new ByteArrayInputStream(new byte[0])); }
             }
         });
-        setContentView(web);
+        setContentView(frame);
+        if (Build.VERSION.SDK_INT >= 30) {
+            WindowInsetsController controller=getWindow().getInsetsController();
+            if(controller!=null)controller.setSystemBarsAppearance(0,WindowInsetsController.APPEARANCE_LIGHT_STATUS_BARS | WindowInsetsController.APPEARANCE_LIGHT_NAVIGATION_BARS);
+        }
         web.loadUrl("https://" + HOST + "/index.html");
     }
     private static WebResourceResponse response(int code, String mime, InputStream data) {

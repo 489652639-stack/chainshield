@@ -38,6 +38,9 @@ class Flow(unittest.TestCase):
     def test_complete_news_first_flow_and_restart_no_duplicate(self):
         self.r.cycle();s=self.r.snapshot();self.assertEqual(len(s['positions']),1);self.assertEqual(s['topics'][0]['entity'],'nebulax');self.assertFalse(s['live_available']);self.assertEqual(s['mode'],'模拟交易')
         self.assertEqual(len(s['topics'][0]['evidence']),2)
+        self.assertEqual(s['counts'],{'news':2,'topics':1,'attempts':1,'open_positions':1})
+        self.assertEqual({n['origin'] for n in s['news']},{'one.example','two.example'})
+        self.assertEqual(set(s['news'][0]),{'title','url','origin','published'})
         cash=self.db.get('cash');self.r.cycle();self.assertEqual(self.db.get('cash'),cash)
         db2=Store(self.path);Radar(db2,self.api,lambda:NOW).cycle();self.assertEqual(len(db2.rows('SELECT * FROM positions')),1);db2.db.close()
     def test_one_source_or_stale_news_cannot_buy(self):

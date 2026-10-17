@@ -234,5 +234,10 @@ class Radar:
                 p['evidence'] = json.loads(p.pop('note'))
             return {'mode': '模拟交易', 'live_available': False, 'enabled': self.store.get('enabled') == 'true', 'cash_usdc': self.store.get('cash'),
                     'budget_cny': 100, 'last': dict(self.last), 'health': dict(getattr(self.api, 'health', {})),
+                    'counts': {'news': self.store.rows('SELECT COUNT(*) AS n FROM signals')[0]['n'],
+                               'topics': self.store.rows('SELECT COUNT(*) AS n FROM topics')[0]['n'],
+                               'attempts': self.store.rows('SELECT COUNT(*) AS n FROM attempts')[0]['n'],
+                               'open_positions': self.store.rows('SELECT COUNT(*) AS n FROM positions WHERE closed IS NULL')[0]['n']},
+                    'news': [{k: s[k] for k in ('title', 'url', 'origin', 'published')} for s in self.store.rows('SELECT * FROM signals ORDER BY published DESC LIMIT 20')],
                     'topics': [{**t, 'evidence': json.loads(t['evidence'])} for t in self.store.rows('SELECT * FROM topics ORDER BY created DESC LIMIT 50')],
                     'attempts': self.store.rows('SELECT * FROM attempts ORDER BY at DESC LIMIT 100'), 'positions': positions}

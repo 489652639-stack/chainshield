@@ -6,6 +6,14 @@ server_pid=$!
 python3 -m radar.ci_tls > /tmp/radar-tls.log 2>&1 &
 tls_pid=$!
 trap 'kill "$server_pid" "$tls_pid" 2>/dev/null || true' EXIT
+for attempt in $(seq 1 20); do
+  if curl --fail --silent --cacert /tmp/radar-ci.crt -H "Authorization: Bearer $RADAR_TOKEN" https://127.0.0.1:9443/api/state > /tmp/radar-ready.json; then break; fi
+  sleep 1
+done
+python3 - <<'CHECK'
+import json
+with open('/tmp/radar-ready.json') as f:assert json.load(f)['mode']=='模拟交易'
+CHECK
 adb install -r radar/android/app/build/outputs/apk/debug/app-debug.apk
 adb install -r radar/android/app/build/outputs/apk/androidTest/debug/app-debug-androidTest.apk
 adb shell cmd overlay enable com.android.internal.systemui.navbar.threebutton

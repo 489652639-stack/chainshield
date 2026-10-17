@@ -34,6 +34,13 @@ public class SmokeTest extends Instrumentation {
         MainActivity.Bridge bridge=a.new Bridge();
         require(new JSONObject(bridge.configure("https://10.0.2.2:9443","radar-ci-readonly-test-token-0000000000")).optBoolean("ok"),"服务器配置");
         JSONObject state=new JSONObject(bridge.request("/api/state",""));
+        if(state.has("error")){
+            try{
+                javax.net.ssl.HttpsURLConnection c=(javax.net.ssl.HttpsURLConnection)new java.net.URL("https://10.0.2.2:9443/api/state").openConnection();
+                c.setConnectTimeout(10000);c.setReadTimeout(10000);
+                require(false,"测试HTTPS诊断状态="+c.getResponseCode()+"，应用返回="+state.optString("error"));
+            }catch(java.io.IOException ex){throw new Exception("测试HTTPS诊断："+ex.toString());}
+        }
         require("模拟交易".equals(state.optString("mode"))&&state.getInt("budget_cny")==100&&!state.optBoolean("live_available"),"真实服务器连接与模拟模式");
         require(state.has("news")&&state.has("counts"),"真实后台提供新闻列表和扫描统计");
         js(web,"show('settings');document.getElementById('server').value=JSON.parse(Native.config()).url;document.getElementById('save').click();true");

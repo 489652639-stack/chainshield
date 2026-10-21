@@ -10,11 +10,13 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import parse_qs, urlsplit
 from radar.api import API
 from radar.core import Radar, Store
+from radar.observe_read import read_snapshot
 
 WEB = Path(__file__).parent / 'web'
 
 
-def make_handler(radar, token):
+def make_handler(radar, token, observe_only=False, snapshot_path='/var/lib/chainshield-observe/snapshot.json'):
+    manual_api = API() if observe_only else None
     class Handler(BaseHTTPRequestHandler):
         protocol_version = 'HTTP/1.1'
 
@@ -43,12 +45,19 @@ def make_handler(radar, token):
                 return self.send(200, (WEB / name).read_bytes(), mime + '; charset=utf-8')
             if not self.auth():
                 return self.send(401, {'error': '服务器访问密钥无效'})
+            if url.path == '/api/radar/state':
+                try:
+                    return self.send(200, read_snapshot(snapshot_path))
+                except (OSError, ValueError, TypeError):
+                    return self.send(503, {'error': '真实观察快照尚未接通，请等待后台接入或恢复'})
             if url.path == '/api/state':
+                if observe_only:
+                    return self.send(200, {'mode': '只读观察', 'enabled': False, 'live_available': False})
                 return self.send(200, radar.snapshot())
             if url.path == '/api/check':
                 try:
                     params = parse_qs(url.query)
-                    result = radar.api.check(params.get('chain',[''])[0], params.get('address',[''])[0])
+                    result = (manual_api if observe_only else radar.api).check(params.get('chain',[''])[0], params.get('address',[''])[0])
                     return self.send(200, result)
                 except ValueError as exc:
                     return self.send(400, {'error': str(exc)})
@@ -57,6 +66,9 @@ def make_handler(radar, token):
             return self.send(404, {'error': '接口不存在'})
 
         def do_POST(self):
+            if observe_only:
+                self.close_connection = True
+                return self.send(403, {'error': '只读观察模式不允许写入或模拟入场'})
             if not self.auth():
                 self.close_connection = True
                 return self.send(401, {'error': '服务器访问密钥无效'})
@@ -94,7 +106,8 @@ def main():
     if os.getenv('TRADING_MODE', 'paper') != 'paper':
         raise SystemExit('此版本只开放模拟交易，没有实盘签名器')
     Path(args.db).parent.mkdir(parents=True, exist_ok=True)
-    radar = Radar(Store(args.db), API())
+    observe_only = os.getenv('RADAR_OBSERVE_ONLY', '0') == '1'
+    radar = None if observe_only else Radar(Store(args.db), API())
     stop = threading.Event()
 
     def worker():
@@ -110,14 +123,15 @@ def main():
             sock.settimeout(20)
             return sock, addr
 
-    server = Server(('127.0.0.1', args.port), make_handler(radar, token))
-    threading.Thread(target=worker, daemon=True).start()
+    server = Server(('127.0.0.1', args.port), make_handler(radar, token, observe_only=observe_only))
+    if not observe_only:
+        threading.Thread(target=worker, daemon=True).start()
     def shutdown(*_):
         stop.set()
         threading.Thread(target=server.shutdown, daemon=True).start()
     signal.signal(signal.SIGTERM, shutdown)
     signal.signal(signal.SIGINT, shutdown)
-    print('链盾热点雷达已启动：仅模拟模式，服务器在手机关闭后继续运行', flush=True)
+    print('链盾热点雷达已启动：' + ('只读观察，无自动交易循环' if observe_only else '原有模拟模式'), flush=True)
     try:
         server.serve_forever()
     finally:

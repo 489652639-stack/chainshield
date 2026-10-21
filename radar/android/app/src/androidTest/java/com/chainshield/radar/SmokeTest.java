@@ -8,7 +8,7 @@ public class SmokeTest extends Instrumentation {
  @Override public void onCreate(Bundle args){super.onCreate(args);finalOnly="true".equals(args.getString("finalOnly"));start();}
  @Override public void onStart(){Bundle result=new Bundle();try{
   MainActivity a=(MainActivity)startActivitySync(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));WebView w=find(a.getWindow().getDecorView());require(w!=null,"APK安装启动");
-  for(int i=0;i<40;i++){if("4".equals(js(w,"document.querySelectorAll('nav button').length")))break;Thread.sleep(250);}
+  for(int i=0;i<40;i++){if("true".equals(js(w,"typeof window.show==='function'&&document.querySelectorAll('nav button').length===4")))break;Thread.sleep(250);}
   require("4".equals(js(w,"document.querySelectorAll('nav button').length")),"四个中文页面加载");
   for(String p:new String[]{"overview","hotspots","candidates","settings"})require("true".equals(js(w,"show('"+p+"');!document.getElementById('"+p+"').hidden")),"页面切换："+p);
   require("true".equals(js(w,"(()=>{let r=document.querySelector('nav').getBoundingClientRect();return r.bottom<=innerHeight+1&&[...document.querySelectorAll('nav button')].every(b=>b.getBoundingClientRect().height>=48)})()")),"导航位于视口且触摸高度足够");

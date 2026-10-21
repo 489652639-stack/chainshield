@@ -5,11 +5,11 @@ After=chainshield-source-test.service chainshield-shadow.service
 [Service]
 Type=oneshot
 User=chainshield-source-test
-Group=chainshield
+Group=chainshield-source-test
 WorkingDirectory=/opt/chainshield
 ExecStart=/usr/bin/python3 -B -m radar.observe_export
-StateDirectory=chainshield-observe
-StateDirectoryMode=0750
+# Deployment creates /var/lib/chainshield-observe owner 996, group 997, mode 2750.
+# setgid grants backend read access to this handoff only, not to either DB.
 UMask=0027
 NoNewPrivileges=yes
 ProtectSystem=strict

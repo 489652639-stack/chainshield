@@ -22,12 +22,15 @@ jobs:
           distribution: temurin
           java-version: '17'
       - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+          log-accepted-android-sdk-licenses: false
       - uses: gradle/actions/setup-gradle@v4
       - name: 检查语法
         run: |
           node --check radar/web/app.js
           python -m py_compile radar/observe_ci.py
-          mkdir -p radar/artifacts radar/evidence
+          mkdir -p radar/observe-artifacts radar/observe-evidence
       - name: 构建受控测试证书
         run: |
           openssl req -x509 -newkey rsa:2048 -nodes -days 1 -keyout /tmp/radar-ci.key -out /tmp/radar-ci.crt -subj '/CN=RadarCI' -addext 'subjectAltName=IP:10.0.2.2,IP:127.0.0.1'
@@ -62,8 +65,8 @@ jobs:
         with:
           name: ChainShield-Radar-observe
           path: |
-            radar/artifacts/*.apk
-            radar/evidence/observe-*
-            radar/evidence/final-*
-            radar/evidence/apk-*
+            radar/observe-artifacts/*.apk
+            radar/observe-evidence/observe-*
+            radar/observe-evidence/final-*
+            radar/observe-evidence/apk-*
             radar/android/app/build/reports/lint-results-debug.html

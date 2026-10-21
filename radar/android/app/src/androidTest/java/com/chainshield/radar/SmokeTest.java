@@ -29,6 +29,7 @@ public class SmokeTest extends Instrumentation {
    require("true".equals(js(w,"document.getElementById('grade').value='audit';document.getElementById('grade').dispatchEvent(new Event('change'));document.getElementById('candidate-list').textContent.includes('证据不足')")),"弱关联审计与候选分开");
    js(w,"document.getElementById('grade').value='all';document.getElementById('grade').dispatchEvent(new Event('change'));show('overview');true");
   }
+  CountDownLatch painted=new CountDownLatch(1);runOnMainSync(()->w.postVisualStateCallback(android.os.SystemClock.uptimeMillis(),new WebView.VisualStateCallback(){@Override public void onComplete(long id){painted.countDown();}}));require(painted.await(10,TimeUnit.SECONDS),"等待页面实际绘制");
   android.graphics.Bitmap shot=getUiAutomation().takeScreenshot();try(java.io.FileOutputStream out=getTargetContext().openFileOutput(finalOnly?"final-apk.png":"observe-overview.png",0)){shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}shot.recycle();
   result.putString("结果",finalOnly?"交付APK安装启动及真实HTTPS鉴权边界通过；未使用生产密钥":"受控快照展示验证通过；不代表生产完整接入");finish(Activity.RESULT_OK,result);
  }catch(Exception e){result.putString("错误",e.toString());finish(Activity.RESULT_CANCELED,result);}}

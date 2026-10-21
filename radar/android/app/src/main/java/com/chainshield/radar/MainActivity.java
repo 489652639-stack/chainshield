@@ -16,11 +16,13 @@ import java.net.*;
 import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
+import java.util.concurrent.*;
 import org.json.JSONObject;
 
 public final class MainActivity extends Activity {
     private WebView web;
     private SharedPreferences prefs;
+    private final ThreadPoolExecutor requests = new ThreadPoolExecutor(1,1,0L,TimeUnit.SECONDS,new ArrayBlockingQueue<>(4));
     private static final String HOST = "appassets.androidplatform.net";
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
@@ -96,7 +98,7 @@ public final class MainActivity extends Activity {
                 if (!"https".equals(uri.getScheme()) || uri.getHost()==null || uri.getUserInfo()!=null || uri.getQuery()!=null || uri.getFragment()!=null || !(uri.getPath().isEmpty() || uri.getPath().equals("/")))
                     return error("请输入 HTTPS 服务器根地址");
                 String secret = token.isEmpty() ? prefs.getString("token","") : token;
-                if (secret.length()<32) return error("访问密钥至少32位");
+                if (secret.length()<32 || secret.length()>512 || !secret.matches("[\\x21-\\x7E]+")) return error("访问密钥需要32至512位可见ASCII字符");
                 prefs.edit().putString("url",base.trim().replaceAll("/+$", "")).putString("token",secret).commit();
                 return "{\"ok\":true}";
             } catch (Exception e) { return error("服务器地址格式错误"); }
@@ -104,21 +106,15 @@ public final class MainActivity extends Activity {
         @JavascriptInterface public String request(String path, String body) {
             HttpURLConnection conn = null;
             try {
-                if (!(path.equals("/api/state") || path.startsWith("/api/check?") || path.equals("/api/entry"))) return error("不支持该操作");
+                if (!body.isEmpty() || !(path.equals("/api/state") || path.equals("/api/radar/state") || path.matches("/api/check\\?chain=sol&address=[1-9A-HJ-NP-Za-km-z]{32,44}"))) return error("只允许读取观察数据或手动安全查询");
                 if (path.length()>1024 || !path.startsWith("/api/") || path.contains("\r") || path.contains("\n")) return error("请求格式错误");
                 String base = prefs.getString("url","");
                 if (base.isEmpty()) return error("请先在系统设置连接服务器");
                 conn = (HttpURLConnection) new URL(base+path).openConnection();
                 conn.setInstanceFollowRedirects(false);
                 conn.setConnectTimeout(10000);
-                conn.setReadTimeout(40000);
+                conn.setReadTimeout(25000);
                 conn.setRequestProperty("Authorization", "Bearer " + prefs.getString("token",""));
-                if (!body.isEmpty()) {
-                    if (!path.equals("/api/entry")) return error("不支持该操作");
-                    conn.setRequestMethod("POST"); conn.setDoOutput(true);
-                    conn.setRequestProperty("Content-Type", "application/json");
-                    try (OutputStream out=conn.getOutputStream()) { out.write(body.getBytes(StandardCharsets.UTF_8)); }
-                }
                 int status = conn.getResponseCode();
                 if (status>=300 && status<400) return error("服务器跳转已拦截，请检查根地址");
                 InputStream stream = status<400 ? conn.getInputStream() : conn.getErrorStream();
@@ -128,10 +124,24 @@ public final class MainActivity extends Activity {
                     byte[] buf=new byte[8192]; int n;
                     while ((n=in.read(buf))!=-1) { bytes.write(buf,0,n); if (bytes.size()>2_000_000) return error("服务器响应过大"); }
                 }
-                return bytes.toString("UTF-8");
+                return new JSONObject(bytes.toString("UTF-8")).put("_http_status",status).toString();
             } catch (Exception e) { return error("连接失败，请检查地址、证书、密钥及网络"); }
             finally { if(conn!=null) conn.disconnect(); }
         }
+        @JavascriptInterface public void requestAsync(String path, String id) {
+            if (!id.matches("[0-9]{1,12}")) return;
+            try { requests.execute(()->{
+                String result=request(path,"");
+                runOnUiThread(()->{ if(!isDestroyed()) web.evaluateJavascript("window.nativeResult("+JSONObject.quote(id)+","+JSONObject.quote(result)+")",null); });
+            }); } catch(RejectedExecutionException ignored) {
+                runOnUiThread(()->web.evaluateJavascript("window.nativeResult("+JSONObject.quote(id)+","+JSONObject.quote(error("请求队列繁忙，请稍后刷新"))+")",null));
+            }
+        }
+        @JavascriptInterface public String copyMint(String mint) {
+            if (!mint.matches("[1-9A-HJ-NP-Za-km-z]{32,44}")) return error("Mint地址格式错误");
+            runOnUiThread(()->((android.content.ClipboardManager)getSystemService(CLIPBOARD_SERVICE)).setPrimaryClip(android.content.ClipData.newPlainText("Mint",mint)));
+            return "{\"ok\":true}";
+        }
     }
-    @Override protected void onDestroy() { web.removeJavascriptInterface("Native"); web.destroy(); super.onDestroy(); }
+    @Override protected void onDestroy() { requests.shutdownNow(); web.removeJavascriptInterface("Native"); web.destroy(); super.onDestroy(); }
 }

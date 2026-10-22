@@ -1,0 +1,63 @@
+package com.chainshield.radar;
+import android.app.*;
+import android.content.Intent;
+import android.os.Bundle;
+import android.webkit.WebView;
+import android.view.*;
+import org.json.JSONObject;
+import java.util.concurrent.*;
+
+public class SmokeTest extends Instrumentation {
+    private WebView find(View v) { if(v instanceof WebView)return (WebView)v;if(v instanceof ViewGroup){ViewGroup g=(ViewGroup)v;for(int i=0;i<g.getChildCount();i++){WebView w=find(g.getChildAt(i));if(w!=null)return w;}}return null; }
+    private String js(WebView web,String code) throws Exception {
+        CountDownLatch latch=new CountDownLatch(1);String[] result={""};
+        runOnMainSync(()->web.evaluateJavascript(code,v->{result[0]=v;latch.countDown();}));
+        if(!latch.await(65,TimeUnit.SECONDS))throw new Exception("页面执行超时");return result[0];
+    }
+    private void require(boolean ok,String text)throws Exception{if(!ok)throw new Exception(text);Bundle b=new Bundle();b.putString("检查",text);sendStatus(0,b);}
+    @Override public void onCreate(Bundle args){super.onCreate(args);start();}
+    @Override public void onStart(){Bundle result=new Bundle();try{
+        MainActivity a=(MainActivity)startActivitySync(new Intent(getTargetContext(),MainActivity.class).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK));
+        WebView web=find(a.getWindow().getDecorView());require(web!=null,"安卓应用启动");
+        for(int i=0;i<30;i++){if("4".equals(js(web,"document.querySelectorAll('nav button').length")))break;Thread.sleep(300);}
+        require("4".equals(js(web,"document.querySelectorAll('nav button').length")),"四个中文页面加载");
+        require("true".equals(js(web,"(()=>{const r=document.querySelector('nav').getBoundingClientRect();return r.top>=0&&r.bottom<=innerHeight+1&&[...document.querySelectorAll('nav button')].every(b=>b.getBoundingClientRect().height>=48)})()")),"导航完整位于页面视口且按钮足够大");
+        final boolean[] aboveSystemBar={false};
+        runOnMainSync(()->{
+            View decor=a.getWindow().getDecorView();
+            int[] pos=new int[2];web.getLocationInWindow(pos);
+            android.graphics.Insets bars=decor.getRootWindowInsets().getInsets(WindowInsets.Type.systemBars());
+            aboveSystemBar[0]=pos[1]>=bars.top && pos[1]+web.getHeight()<=decor.getHeight()-bars.bottom;
+        });
+        require(aboveSystemBar[0],"WebView视口位于系统状态栏和导航栏之间");
+        for(String page:new String[]{"radar","shield","trade","settings"})require("true".equals(js(web,"show('"+page+"');!document.getElementById('"+page+"').hidden")),"页面切换："+page);
+        MainActivity.Bridge bridge=a.new Bridge();
+        require(new JSONObject(bridge.configure("https://10.0.2.2:9443","radar-ci-readonly-test-token-0000000000")).optBoolean("ok"),"服务器配置");
+        JSONObject state=new JSONObject(bridge.request("/api/state",""));
+        if(state.has("error")){
+            try{
+                javax.net.ssl.HttpsURLConnection c=(javax.net.ssl.HttpsURLConnection)new java.net.URL("https://10.0.2.2:9443/api/state").openConnection();
+                c.setConnectTimeout(10000);c.setReadTimeout(10000);
+                require(false,"测试HTTPS诊断状态="+c.getResponseCode()+"，应用返回="+state.optString("error"));
+            }catch(java.io.IOException ex){throw new Exception("测试HTTPS诊断："+ex.toString());}
+        }
+        require("模拟交易".equals(state.optString("mode"))&&state.getInt("budget_cny")==100&&!state.optBoolean("live_available"),"真实服务器连接与模拟模式");
+        require(state.has("news")&&state.has("counts"),"真实后台提供新闻列表和扫描统计");
+        js(web,"show('settings');document.getElementById('server').value=JSON.parse(Native.config()).url;document.getElementById('save').click();true");
+        boolean enteredRadar=false;
+        for(int i=0;i<30;i++){Thread.sleep(300);if("true".equals(js(web,"!document.getElementById('radar').hidden&&document.getElementById('status').textContent.includes('服务器已连接')"))){enteredRadar=true;break;}}
+        require(enteredRadar,"保存连接后进入热点雷达并显示真实状态");
+        require(new JSONObject(bridge.request("/api/entry","{\"enabled\":false}")).getBoolean("enabled")==false,"暂停模拟入场接口");
+        require(new JSONObject(bridge.request("/api/live","{}")).has("error"),"实盘入口关闭");
+        js(web,"show('shield');document.getElementById('address').value='So11111111111111111111111111111111111111112';document.getElementById('check').click();true");
+        boolean queried=false;
+        for(int i=0;i<90;i++){Thread.sleep(1000);if("true".equals(js(web,"document.getElementById('report').children.length>5"))){queried=true;break;}}
+        require(queried,"一键索拉纳查询并展示检测项（允许明确未知）");
+        js(web,"show('radar');true");
+        Thread.sleep(500);
+        android.graphics.Bitmap shot=getUiAutomation().takeScreenshot();
+        try(java.io.FileOutputStream out=getTargetContext().openFileOutput("radar-overview.png",android.content.Context.MODE_PRIVATE)){shot.compress(android.graphics.Bitmap.CompressFormat.PNG,100,out);}
+        shot.recycle();
+        result.putString("结果","全部设备检查通过；真实接口细节见独立探针报告");finish(Activity.RESULT_OK,result);
+    }catch(Exception e){result.putString("错误",e.toString());finish(Activity.RESULT_CANCELED,result);}}
+}

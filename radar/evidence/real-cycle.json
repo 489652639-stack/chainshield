@@ -1,0 +1,33 @@
+{
+  "kind": "真实数据单轮试运行",
+  "elapsed_seconds": 23.42,
+  "max_rss_kib": 19624,
+  "address_space_limit_mib": 1536,
+  "topics": 0,
+  "positions": 0,
+  "last": {
+    "state": "运行中",
+    "at": 1792190619.2098892,
+    "error": null
+  },
+  "health": {
+    "feeds.bbci.co.uk": {
+      "state": "可连接",
+      "at": 1792190601.019192
+    },
+    "www.theguardian.com": {
+      "state": "可连接",
+      "at": 1792190607.5890374
+    },
+    "api.frankfurter.app": {
+      "state": "可连接",
+      "at": 1792190619.2060509
+    },
+    "汇率": {
+      "state": "参考美元兑人民币；按USDC等值1美元估算",
+      "date": "2026-10-16",
+      "rate": "6.6862"
+    }
+  },
+  "note": "仅单轮资源样本，不代表2核2GB长时稳定性；无自然合格新币时持仓为零"
+}

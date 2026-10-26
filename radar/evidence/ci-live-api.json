@@ -1,0 +1,98 @@
+{
+  "at": "2026-10-16T22:47:02Z",
+  "read_only": true,
+  "broadcasts": 0,
+  "results": [
+    {
+      "name": "新闻RSS",
+      "ok": true,
+      "elapsed_ms": 330,
+      "detail": {
+        "recent_or_old_items": 81
+      }
+    },
+    {
+      "name": "汇率",
+      "ok": true,
+      "elapsed_ms": 268,
+      "detail": "6.6862"
+    },
+    {
+      "name": "DexScreener搜索",
+      "ok": true,
+      "elapsed_ms": 90,
+      "detail": {
+        "pairs": 30
+      }
+    },
+    {
+      "name": "JupiterV2只读报价",
+      "ok": true,
+      "elapsed_ms": 506,
+      "detail": {
+        "inAmount": "1000000",
+        "outAmount": "9578797",
+        "router": "jupiterz",
+        "feeBps": 2
+      }
+    },
+    {
+      "name": "DexScreener升级握手",
+      "ok": true,
+      "elapsed_ms": 86,
+      "detail": {
+        "http_status": 403,
+        "websocket_upgraded": false
+      }
+    },
+    {
+      "name": "GoPlus-sol",
+      "ok": true,
+      "elapsed_ms": 424,
+      "detail": {
+        "fields": 20
+      }
+    },
+    {
+      "name": "GoPlus-eth",
+      "ok": true,
+      "elapsed_ms": 444,
+      "detail": {
+        "fields": 34
+      }
+    },
+    {
+      "name": "Honeypot-eth",
+      "ok": true,
+      "elapsed_ms": 178,
+      "detail": {
+        "simulationSuccess": true
+      }
+    },
+    {
+      "name": "GoPlus-bnb",
+      "ok": true,
+      "elapsed_ms": 301,
+      "detail": {
+        "fields": 34
+      }
+    },
+    {
+      "name": "Honeypot-bnb",
+      "ok": true,
+      "elapsed_ms": 174,
+      "detail": {
+        "simulationSuccess": true
+      }
+    },
+    {
+      "name": "RugCheck-sol",
+      "ok": true,
+      "elapsed_ms": 294,
+      "detail": {
+        "fields": 36
+      }
+    }
+  ],
+  "all_passed": true
+}

@@ -1,0 +1,4 @@
+# Replace radar.example.com with your server domain, point its DNS to this server.
+radar.example.com {
+    reverse_proxy 127.0.0.1:8787
+}

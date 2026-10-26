@@ -1,0 +1,1 @@
+76f5a750f793112b22c0cc8e0cef5df184cff2667c32b3715f0fb7d72876d472  radar/artifacts/ChainShield-Radar-0.1.0-paper-debug.apk
